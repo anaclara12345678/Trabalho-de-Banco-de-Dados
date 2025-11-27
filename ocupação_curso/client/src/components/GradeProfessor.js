@@ -8,7 +8,7 @@ function GradeProfessor({ corCabecalho = '#0056b3' }) {
     const [aviso, setAviso] = useState('');
 
     useEffect(() => {
-        fetch('http://localhost:3000/professores')
+        fetch('http://localhost:3001/professores')
             .then(res => res.json())
             .then(data => setProfessores(data))
             .catch(err => console.error("Erro ao buscar professores:", err));
@@ -21,7 +21,7 @@ function GradeProfessor({ corCabecalho = '#0056b3' }) {
             return;
         }
 
-        fetch(`http://localhost:3000/grade-professor/${professorId}`)
+        fetch(`http://localhost:3001/grade-professor/${professorId}`)
             .then(res => res.json())
             .then(data => {
                 setGrade(data);
