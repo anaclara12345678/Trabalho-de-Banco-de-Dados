@@ -1,0 +1,9 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* small styling to match visual */
+.header-hero{
+  background: linear-gradient(180deg,#075091 0%, #0b5ea8 100%);
+}
+.btn-yellow{ background:#f6b300 }
