@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Filtros Avançados</title>
+    <style>
+        :root{--blue:#0b63c8;--yellow:#ffcc00}
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+            background-color: #f5f7fa;
+            margin: 0;
+            -webkit-font-smoothing:antialiased;
+        }
+        header {
+            background: linear-gradient(180deg,var(--blue), #0859a8);
+            padding: 20px;
+            color: white;
+            font-size: 22px;
+            font-weight: 700;
+        }
+        .container {
+            max-width: 1100px;
+            margin: 28px auto;
+            background: white;
+            padding: 22px;
+            border-radius: 8px;
+            box-shadow: 0 6px 18px rgba(8,32,70,0.08);
+        }
+        .filter-box { background: var(--blue); color: #fff; padding: 12px 14px; border-radius:6px; font-weight:700; margin-bottom:12px }
+        .row{display:flex;gap:18px;flex-wrap:wrap}
+        .col{flex:1;min-width:220px}
+        .form-group{margin-bottom:12px}
+        label{display:block;font-weight:600;margin-bottom:6px}
+        input[type=text], input[type=time], select, .checkboxes{width:100%;padding:10px;border:1px solid #d8dbe0;border-radius:6px}
+        .checkboxes{display:flex;flex-wrap:wrap;gap:10px}
+        .checkboxes label{display:flex;align-items:center;gap:6px;font-weight:500}
+        .controls{display:flex;justify-content:space-between;align-items:center;margin-top:14px}
+        .btn{background:var(--yellow);border:none;padding:10px 18px;border-radius:6px;font-weight:700;cursor:pointer}
+        .btn:active{transform:translateY(1px)}
+        pre#sqlOutput{background:#0f1724;color:#e6f3ff;padding:12px;border-radius:6px;margin-top:14px;white-space:pre-wrap;word-break:break-word}
+        .note{font-size:13px;color:#444;margin-top:6px}
+        @media(max-width:680px){.row{flex-direction:column}}
+    </style>
+</head>
+<body>
+<header>Filtros Avançados</header>
+
+<div class="container">
+
+    <div class="filter-box">Filtrar por inicial do nome do professor</div>
+
+    <div class="form-group">
+        <label for="letra">Informe a letra inicial do nome</label>
+        <input id="letra" type="text" placeholder="Ex: A" maxlength="1" aria-label="Letra inicial" />
+    </div>
+
+    <div class="filter-box">Filtrar aulas entre um horário inicial e final</div>
+
+    <div class="row">
+        <div class="col form-group">
+            <label for="horaInicial">Hora inicial</label>
+            <input id="horaInicial" type="time" />
+        </div>
+        <div class="col form-group">
+            <label for="horaFinal">Hora final</label>
+            <input id="horaFinal" type="time" />
+        </div>
+    </div>
+
+    <div class="filter-box">Filtrar disciplinas de determinados curso</div>
+
+    <div class="form-group checkboxes" role="group" aria-label="Cursos">
+        <label><input type="checkbox" name="curso" value="ADS" /> ADS</label>
+        <label><input type="checkbox" name="curso" value="SI" /> SI</label>
+        <label><input type="checkbox" name="curso" value="CC" /> Ciência da Computação</label>
+        <label><input type="checkbox" name="curso" value="ES" /> Engenharia de Software</label>
+    </div>
+
+    <div class="controls">
+        <div>
+            <button id="btnPesquisar" class="btn">Pesquisar</button>
+            <span class="note">Clique para filtrar</span>
+        </div>
+        <div>
+            <button id="btnLimpar" class="btn" style="background:#e6e6e6;color:#111">Limpar</button>
+        </div>
+    </div>
+
+    <div id="tableOutput" hidden></div>
+
+</div>
+
+<script>
+(function(){
+    const btn = document.getElementById('btnPesquisar');
+    const btnLimpar = document.getElementById('btnLimpar');
+    const out = document.getElementById('sqlOutput');
+
+    function sanitize(value){
+        if(!value) return '';
+        return String(value).replace(/'/g, "''"); // basic SQL escaping for single quote
+    }
+
+    function buildSQL({letra, horaInicial, horaFinal, cursos}){
+        // build SQL using template literal and explicit \n for new lines
+        let sql = "SELECT p.id AS professor_id, p.nome AS professor_nome, d.nome AS disciplina, c.nome AS curso, h.hora AS horario\n" +
+                  "FROM PROFESSOR p\n" +
+                  "JOIN ALOCACAO a ON p.id = a.id_professor\n" +
+                  "JOIN HORARIO h ON a.id_horario = h.id\n" +
+                  "JOIN DISCIPLINA d ON a.id_disciplina = d.id\n" +
+                  "JOIN CURSO c ON d.id_curso = c.id\n" +
+                  "WHERE 1=1\n";
+
+        if(letra){
+            sql += "AND p.nome LIKE '" + sanitize(letra) + "%'\n";
+        }
+
+        if(horaInicial && horaFinal){
+            // ensure format HH:MM
+            sql += "AND h.hora BETWEEN '" + sanitize(horaInicial) + "' AND '" + sanitize(horaFinal) + "'\n";
+        } else if (horaInicial || horaFinal){
+            // single bound
+            if(horaInicial) sql += "AND h.hora >= '" + sanitize(horaInicial) + "'\n";
+            if(horaFinal) sql += "AND h.hora <= '" + sanitize(horaFinal) + "'\n";
+        }
+
+        if(cursos && cursos.length){
+            const vals = cursos.map(sanitize).map(v => "'"+v+"'").join(', ');
+            sql += "AND c.sigla IN (" + vals + ")\n";
+        }
+
+        sql += "ORDER BY p.nome, h.hora;";
+        return sql;
+    }
+
+    btn.addEventListener('click', function(){
+        const letra = document.getElementById('letra').value.trim().toUpperCase();
+        const horaInicial = document.getElementById('horaInicial').value;
+        const horaFinal = document.getElementById('horaFinal').value;
+        const cursos = Array.from(document.querySelectorAll('input[name="curso"]:checked')).map(i => i.value);
+
+        // Mocked sample data (simulate DB result)
+        const data = [
+            {professor:'Ana Silva', disciplina:'Banco de Dados', curso:'ADS', inicio:'18:00', fim:'20:00'},
+            {professor:'Carlos Rocha', disciplina:'POO', curso:'SI', inicio:'19:00', fim:'21:00'}
+        ];
+
+        const tableDiv = document.getElementById('tableOutput');
+        let html = '<table style="width:100%;border-collapse:collapse">';
+        html += '<tr><th>Professor</th><th>Disciplina</th><th>Curso</th><th>Início</th><th>Fim</th></tr>';
+        data.forEach(r=>{
+            html += `<tr><td>${r.professor}</td><td>${r.disciplina}</td><td>${r.curso}</td><td>${r.inicio}</td><td>${r.fim}</td></tr>`;
+        });
+        html += '</table>';
+
+        tableDiv.innerHTML = html;
+        tableDiv.hidden = false;
+    });
+
+    btnLimpar.addEventListener('click', function(){
+        document.getElementById('letra').value = '';
+        document.getElementById('horaInicial').value = '';
+        document.getElementById('horaFinal').value = '';
+        document.querySelectorAll('input[name="curso"]').forEach(i=> i.checked = false);
+        out.textContent = '';
+        out.hidden = true;
+    });
+
+})();
+</script>
+
+
+<!-- Backend Python (Flask) Integration -->
+<script>
+// Replace mock data with real API call
+btnPesquisar.onclick = async () => {
+    const letra = document.getElementById('letra').value.trim().toUpperCase();
+    const horaInicial = document.getElementById('horaInicial').value;
+    const horaFinal = document.getElementById('horaFinal').value;
+    const cursos = Array.from(document.querySelectorAll('input[name="curso"]:checked')).map(i => i.value);
+
+    const payload = { letra, horaInicial, horaFinal, cursos };
+
+    const resp = await fetch('http://127.0.0.1:5000/filtrar', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(payload)
+    });
+
+    const data = await resp.json();
+
+    const tableDiv = document.getElementById('tableOutput');
+    let html = '<table style="width:100%;border-collapse:collapse">';
+    html += '<tr><th>Professor</th><th>Disciplina</th><th>Curso</th><th>Início</th><th>Fim</th></tr>';
+    data.forEach(r=>{
+        html += `<tr><td>${r.professor}</td><td>${r.disciplina}</td><td>${r.curso}</td><td>${r.hora_inicio}</td><td>${r.hora_fim}</td></tr>`;
+    });
+    html += '</table>';
+
+    tableDiv.innerHTML = html;
+    tableDiv.hidden = false;
+};
+</script>
+</body>
+</html>
